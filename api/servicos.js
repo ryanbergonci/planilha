@@ -1,5 +1,9 @@
-const URL_ = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+function pick(sufixo) {
+  const k = Object.keys(process.env).find(n => n.endsWith(sufixo));
+  return k ? process.env[k] : undefined;
+}
+const URL_ = pick('KV_REST_API_URL') || pick('UPSTASH_REDIS_REST_URL');
+const TOKEN = pick('KV_REST_API_TOKEN') || pick('UPSTASH_REDIS_REST_TOKEN');
 
 async function redis(cmd) {
   const r = await fetch(URL_, {
