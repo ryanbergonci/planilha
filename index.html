@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Serviços</title>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--tx:#1d1d1b;--mut:#77756f;--bd:#e3e1db;--ac:#e8590c}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--card:#212120;--tx:#f1f0ec;--mut:#9a988f;--bd:#34332f;--ac:#ff7a2f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:8px 0 14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px}
+.row{display:grid;grid-template-columns:1fr 120px 32px;gap:8px;margin-bottom:8px}
+input,button{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:9px;padding:10px;min-width:0}
+input[type=number]{text-align:right}
+button{cursor:pointer}
+.x{border:none;background:none;color:var(--mut);padding:0}
+.add{width:100%;border-style:dashed;color:var(--mut)}
+.tot{display:flex;justify-content:space-between;font-size:22px;font-weight:700;margin-top:14px;padding-top:12px;border-top:2px solid var(--tx)}
+.foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;color:var(--mut);font-size:13px}
+.link{background:none;border:none;color:var(--mut);text-decoration:underline;padding:0}
+#login{display:none;max-width:320px;margin:20vh auto}
+#login input{width:100%;margin-bottom:8px}
+#login button{width:100%;background:var(--ac);color:#fff;border-color:var(--ac);font-weight:600}
+#err{color:#c92a2a;font-size:14px;min-height:20px}
+</style>
+</head>
+<body>
+<main id="app" style="display:none">
+  <h1>Serviços</h1>
+  <div class="card">
+    <div id="rows"></div>
+    <button class="add" id="add">+ Adicionar serviço</button>
+    <div class="tot"><span>Total</span><span id="tot">R$ 0,00</span></div>
+  </div>
+  <div class="foot"><span id="st"></span><button class="link" id="clr">Limpar tudo</button></div>
+</main>
+<div id="login" class="card">
+  <h1>Entrar</h1>
+  <input id="pw" type="password" placeholder="Senha" autocomplete="current-password">
+  <div id="err"></div>
+  <button id="go">Entrar</button>
+</div>
+<script>
+var $=function(i){return document.getElementById(i)};
+var senha=localStorage.getItem("senha")||"",itens=[],timer=null;
+var brl=function(n){return (Number(n)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})};
+
+function total(){var t=0;itens.forEach(function(i){t+=Number(i.v)||0});$("tot").textContent=brl(t)}
+function render(focusLast){
+  var box=$("rows");box.innerHTML="";
+  itens.forEach(function(it,idx){
+    var r=document.createElement("div");r.className="row";
+    var a=document.createElement("input");a.placeholder="Serviço";a.value=it.s||"";
+    a.oninput=function(){it.s=a.value;salvar()};
+    var b=document.createElement("input");b.type="number";b.step="0.01";b.inputMode="decimal";b.placeholder="0,00";b.value=it.v===""||it.v==null?"":it.v;
+    b.oninput=function(){it.v=b.value===""?"":parseFloat(b.value);total();salvar()};
+    b.onkeydown=function(e){if(e.key==="Enter"&&idx===itens.length-1){novo()}};
+    var x=document.createElement("button");x.className="x";x.textContent="✕";x.title="Remover";
+    x.onclick=function(){itens.splice(idx,1);render();total();salvar()};
+    r.appendChild(a);r.appendChild(b);r.appendChild(x);box.appendChild(r);
+    if(focusLast&&idx===itens.length-1)a.focus();
+  });
+  total();
+}
+function novo(){itens.push({s:"",v:""});render(true)}
+function salvar(){
+  $("st").textContent="Salvando…";clearTimeout(timer);
+  timer=setTimeout(function(){
+    fetch("/api/servicos",{method:"PUT",headers:{"Content-Type":"application/json","x-senha":senha},body:JSON.stringify({itens:itens})})
+      .then(function(r){$("st").textContent=r.ok?"Salvo":"Erro ao salvar"}).catch(function(){$("st").textContent="Sem conexão"});
+  },600);
+}
+function carregar(){
+  return fetch("/api/servicos",{headers:{"x-senha":senha}}).then(function(r){
+    if(r.status===401)throw new Error("senha");
+    if(!r.ok)throw new Error("servidor");
+    return r.json();
+  }).then(function(j){
+    itens=j.itens;if(!itens.length)itens=[{s:"",v:""}];
+    $("login").style.display="none";$("app").style.display="block";render();
+  });
+}
+function entrar(){
+  senha=$("pw").value;
+  carregar().then(function(){localStorage.setItem("senha",senha)}).catch(function(e){
+    $("err").textContent=e.message==="senha"?"Senha incorreta":"Erro ao conectar";
+  });
+}
+$("go").onclick=entrar;
+$("pw").onkeydown=function(e){if(e.key==="Enter")entrar()};
+$("add").onclick=novo;
+$("clr").onclick=function(){if(confirm("Apagar todos os serviços?")){itens=[{s:"",v:""}];render();salvar()}};
+carregar().catch(function(){$("login").style.display="block"});
+</script>
+</body>
+</html>
