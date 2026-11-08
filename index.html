@@ -128,14 +128,14 @@ function renderCards(){
 }
 function desenha(){renderCards();total()}
 function salvar(){
-  var l=aba;$("st").textContent="Salvando…";clearTimeout(timers[l]);
-  timers[l]=setTimeout(function(){
-    gravar(l,estado[l]).then(function(){$("st").textContent="Salvo"}).catch(function(){$("st").textContent="Erro ao salvar"});
+  $("st").textContent="Salvando…";clearTimeout(timers.t);
+  timers.t=setTimeout(function(){
+    gravar().then(function(){$("st").textContent="Salvo"}).catch(function(){$("st").textContent="Erro ao salvar"});
   },600);
 }
 function salvarAgora(){
-  var l=aba;clearTimeout(timers[l]);$("st").textContent="Salvando…";
-  gravar(l,estado[l]).then(function(){$("st").textContent="Salvo ✓"}).catch(function(){$("st").textContent="Erro ao salvar"});
+  clearTimeout(timers.t);$("st").textContent="Salvando…";
+  gravar().then(function(){$("st").textContent="Salvo ✓"}).catch(function(){$("st").textContent="Erro ao salvar"});
 }
 function trocar(l){
   aba=l;try{localStorage.setItem("aba",l)}catch(e){}
@@ -175,21 +175,37 @@ $("save").onclick=salvarAgora;
 $("clr").onclick=function(){if(confirm("Apagar tudo desta aba?")){estado[aba]=[];desenha();salvarAgora()}};
 
 var senha="";try{senha=localStorage.getItem("senha")||""}catch(e){}
-function ler(l){
-  return fetch("/api/servicos?lista="+l,{headers:{"x-senha":senha}}).then(function(r){
+function ler(lista){
+  return fetch("/api/servicos"+(lista?"?lista="+lista:""),{headers:{"x-senha":senha}}).then(function(r){
     if(r.status===401)throw new Error("senha");
     if(!r.ok)throw new Error("servidor");
     return r.json();
-  }).then(function(j){return j.itens});
+  }).then(function(j){return j.itens||[]});
 }
-function gravar(l,itens){
-  return fetch("/api/servicos?lista="+l,{method:"PUT",headers:{"Content-Type":"application/json","x-senha":senha},body:JSON.stringify({itens:itens})})
+function gravar(){
+  var pacote=[{__v:2,servicos:estado.servicos,materiais:estado.materiais}];
+  return fetch("/api/servicos",{method:"PUT",headers:{"Content-Type":"application/json","x-senha":senha},body:JSON.stringify({itens:pacote})})
     .then(function(r){if(!r.ok)throw new Error("erro")});
 }
+function ehMaterial(i){return i&&(i.n!=null||i.d!=null)&&i.a==null&&i.s==null}
+var migrar=false;
 function iniciar(){
-  return Promise.all([ler("servicos"),ler("materiais")]).then(function(r){
-    estado.servicos=r[0];estado.materiais=r[1];preencher();
+  return ler().then(function(itens){
+    var p=itens[0];
+    if(p&&p.__v){estado.servicos=p.servicos||[];estado.materiais=p.materiais||[];return}
+    migrar=true;
+    return ler("materiais").catch(function(){return[]}).then(function(extra){
+      var vistos={},s=[],m=[];
+      itens.concat(extra).forEach(function(i){
+        var k=JSON.stringify(i);if(!i||vistos[k])return;vistos[k]=1;
+        (ehMaterial(i)?m:s).push(i);
+      });
+      estado.servicos=s;estado.materiais=m;
+    });
+  }).then(function(){
+    preencher();
     $("login").style.display="none";$("app").style.display="block";marcaAba();desenha();
+    if(migrar){migrar=false;gravar().catch(function(){})}
   });
 }
 function entrar(){
